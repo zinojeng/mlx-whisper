@@ -1,0 +1,41 @@
+# voice_input 預設設定檔
+# 可複製為 config.yaml 並自訂覆蓋
+
+asr:
+  model: "small"
+  quant: null          # null | "4bit" | "8bit"
+  batch_size: 12
+  language: "zh"
+
+audio:
+  sample_rate: 16000
+  channels: 1
+
+postprocess:
+  locale: "zh-TW"
+  filler_words:
+    - "嗯"
+    - "啊"
+    - "就是"
+    - "然後"
+    - "那個"
+    - "對"
+    - "所以"
+    - "基本上"
+    - "就是說"
+    - "反正"
+  max_line_length: 40
+
+delivery:
+  clipboard: true
+  notification: true
+
+llm:
+  enabled: true
+  provider: "xai"
+  model: "grok-4-1-fast-reasoning"
+  base_url: "https://api.x.ai/v1"
+  timeout: 10
+
+logging:
+  level: "INFO"
