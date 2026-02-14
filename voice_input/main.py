@@ -22,6 +22,11 @@ def parse_args():
                         help="啟用 debug 模式")
     parser.add_argument("--no-llm", action="store_true",
                         help="停用 LLM 後處理，僅使用規則管線")
+    parser.add_argument("--context", type=str, default=None,
+                        help="領域上下文 (如「醫學研究」「軟體開發」「財務報告」)")
+    parser.add_argument("--style", type=str, default=None,
+                        choices=["professional", "concise", "bullet", "casual"],
+                        help="輸出風格 (預設: professional)")
     return parser.parse_args()
 
 
@@ -42,6 +47,10 @@ def main():
         config.log_level = "DEBUG"
     if args.no_llm:
         config.llm.enabled = False
+    if args.context:
+        config.llm.context = args.context
+    if args.style:
+        config.llm.style = args.style
 
     # 設定 logging
     logging.basicConfig(
@@ -62,6 +71,11 @@ def main():
     print("  macOS 語音輸入系統 v0.1")
     print(f"  模型: {config.asr.model} | 語言: {config.asr.language}")
     print(f"  LLM 後處理: {llm_status}")
+    if config.llm.enabled and config.llm.api_key:
+        print(f"  風格: {config.llm.style}", end="")
+        if config.llm.context:
+            print(f" | 上下文: {config.llm.context}", end="")
+        print()
     print("=" * 50)
     print()
 

@@ -36,6 +36,8 @@ llm:
   model: "grok-4-1-fast-reasoning"
   base_url: "https://api.x.ai/v1"
   timeout: 30
+  context: ""                # 領域上下文，如 "醫學研究"、"軟體開發"
+  style: "professional"      # professional | concise | bullet | casual
 
 logging:
   level: "INFO"

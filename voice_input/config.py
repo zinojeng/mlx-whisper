@@ -49,6 +49,8 @@ class LLMConfig:
     base_url: str = "https://api.x.ai/v1"
     api_key: str = ""
     timeout: int = 30
+    context: str = ""       # 領域上下文，如 "醫學研究"、"軟體開發"
+    style: str = "professional"  # professional | concise | bullet | casual
 
 
 @dataclass

@@ -40,6 +40,8 @@ class TextPostprocessor:
                     model=self.llm_config.model,
                     base_url=self.llm_config.base_url,
                     timeout=self.llm_config.timeout,
+                    context=self.llm_config.context,
+                    style=self.llm_config.style,
                 )
                 return result.strip()
             except Exception as e:
