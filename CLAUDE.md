@@ -61,6 +61,17 @@ python -m voice_input.main --language en
 
 # 停用 LLM 後處理（僅用規則管線）
 python -m voice_input.main --no-llm
+
+# 指定領域上下文（提高專業術語辨識）
+python -m voice_input.main --context "醫學研究"
+python -m voice_input.main --context "軟體開發"
+
+# 指定輸出風格
+python -m voice_input.main --style bullet
+python -m voice_input.main --style concise
+
+# 組合使用
+python -m voice_input.main --context "醫學研究" --style bullet --debug
 ```
 
 ## 資料流
@@ -89,3 +100,34 @@ hardcoded defaults → `config_default.yaml` → 使用者自訂 YAML（`--confi
 - **API Key**：僅從 `.env` 檔的 `XAI_API_KEY` 環境變數讀取（YAML 中不可設定 api_key，防止洩漏）
 - **行為**：啟用且有 API Key 時優先走 LLM；LLM 失敗或未設定時自動 fallback 到規則管線
 - **停用**：`--no-llm` CLI 參數 或 `config_default.yaml` 中 `llm.enabled: false`
+- **Timeout**：預設 30 秒，不重試（`max_retries=0`），失敗直接 fallback
+
+### 上下文感知（`--context`）
+
+指定領域讓 LLM 更準確推斷同音錯字和專業術語：
+
+| `--context` | 效果範例 |
+|-------------|---------|
+| `"醫學研究"` | 「口號研究」→「世代研究（Cohort Study）」 |
+| `"軟體開發"` | 「城市」→「程式」、「愛批愛」→「API」 |
+| `"財務報告"` | 「應收帳款」「毛利率」等術語正確辨識 |
+| （空）| 無領域偏好，通用處理 |
+
+也可在 `config_default.yaml` 中設定 `llm.context`，CLI `--context` 會覆蓋。
+
+### 輸出風格（`--style`）
+
+| `--style` | 說明 | 輸出範例 |
+|-----------|------|---------|
+| `professional`（預設）| 專業書面語，語氣正式 | 程式的效能表現不錯，但可再優化。API 回應時間約 350 毫秒。 |
+| `concise` | 極度精簡，只留核心 | 程式效能尚可，API 回應 350ms，需優化。 |
+| `bullet` | 條列式要點 | - 程式效能不錯，可再優化<br>- API 回應時間約 350 毫秒 |
+| `casual` | 口語親切風格 | 程式跑起來還不錯啦，API 大概 350 毫秒。 |
+
+### Prompt 架構（`llm_refine.py`）
+
+動態組裝 system prompt：`_BASE_PROMPT` + 領域上下文（選填）+ 風格指示 + `_OUTPUT_INSTRUCTIONS`
+
+處理能力：語意推論、專業術語加註英文、中英夾雜保留、台灣在地用語、口語數字轉阿拉伯數字、去口頭禪、結構化分段
+
+安全措施：`context` 截斷 50 字並移除 `\n` / `#` 防止 prompt injection
