@@ -46,13 +46,16 @@ def build_system_prompt(context: str = "", style: str = "professional") -> str:
     """根據上下文和風格動態組裝 system prompt。"""
     parts = [_BASE_PROMPT]
 
-    # 上下文感知
+    # 上下文感知（限制長度，移除特殊字元以防 prompt injection）
     if context:
-        parts.append(f"\n## 領域上下文\n目前使用者正在談論「{context}」相關內容。"
+        safe_context = context[:50].replace("\n", " ").replace("#", "")
+        parts.append(f"\n## 領域上下文\n目前使用者正在談論「{safe_context}」相關內容。"
                      f"請優先使用該領域的專業術語和慣用表達來修正文字。")
 
     # 風格指示
     style_key = style if style in _STYLE_INSTRUCTIONS else "professional"
+    if style and style not in _STYLE_INSTRUCTIONS:
+        logger.warning("未知的 style '%s'，使用預設 'professional'", style)
     parts.append(f"\n## 輸出風格\n{_STYLE_INSTRUCTIONS[style_key]}")
 
     parts.append(_OUTPUT_INSTRUCTIONS)
