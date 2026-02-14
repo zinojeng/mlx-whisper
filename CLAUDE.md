@@ -18,6 +18,8 @@ lightning-whisper-mlx/
 │   ├── audio_capture.py       # 麥克風錄音（sounddevice）
 │   ├── asr_engine.py          # 封裝 LightningWhisperMLX
 │   ├── postprocess.py         # 後處理（LLM 優先 → 規則 fallback）
+│   ├── menubar_app.py         # macOS Menubar 常駐 App（rumps）
+│   ├── menubar_main.py        # Menubar 進入點
 │   ├── llm_refine.py          # LLM 文字修飾（xAI Grok API）
 │   ├── delivery.py            # 剪貼簿 + macOS 通知
 │   ├── app_controller.py      # 狀態機控制器
@@ -25,7 +27,8 @@ lightning-whisper-mlx/
 ├── config_default.yaml        # 預設設定檔
 ├── .env                       # API Key（不入版控）
 ├── install_and_run.sh         # 一鍵安裝啟動腳本
-├── run_voice_input.command    # macOS 雙擊啟動器
+├── run_voice_input.command    # macOS 雙擊啟動器（CLI 模式）
+├── run_menubar.command        # macOS 雙擊啟動器（Menubar 模式）
 └── setup.py                   # 原始套件安裝
 ```
 
@@ -42,6 +45,7 @@ lightning-whisper-mlx/
 - `PyYAML` — 設定檔解析
 - `openai` — xAI Grok API 客戶端（OpenAI 相容格式）
 - `python-dotenv` — `.env` 檔案載入
+- `rumps` — macOS Menubar App 框架（Menubar 模式需要）
 - 不需要 pyperclip，直接用 macOS 內建 `pbcopy`
 
 ## 常用指令
@@ -52,6 +56,9 @@ bash install_and_run.sh
 
 # 手動執行（已安裝情況下）
 python -m voice_input.main
+
+# 啟動 Menubar 常駐模式（免終端機操作）
+python -m voice_input.menubar_main
 
 # 指定模型 / debug 模式
 python -m voice_input.main --model tiny --debug

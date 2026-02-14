@@ -58,7 +58,7 @@ source "$VENV_DIR/bin/activate"
 echo "正在安裝相依套件..."
 pip install --upgrade pip --quiet
 pip install -e "$SCRIPT_DIR" --quiet
-pip install sounddevice PyYAML python-dotenv openai --quiet
+pip install sounddevice PyYAML python-dotenv openai rumps --quiet
 echo "✅ 套件安裝完成"
 
 echo
@@ -66,6 +66,9 @@ echo "=================================================="
 echo "  安裝完成，啟動語音輸入系統"
 echo "=================================================="
 echo
+echo "  CLI 模式：python -m voice_input.main"
+echo "  Menubar 模式：python -m voice_input.menubar_main"
+echo
 
-# 7. 啟動
+# 7. 啟動（預設 CLI 模式）
 python -m voice_input.main "$@"
