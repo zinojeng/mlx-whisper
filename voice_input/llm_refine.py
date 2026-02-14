@@ -26,7 +26,7 @@ def _get_client(api_key: str, base_url: str, timeout: int) -> OpenAI:
     global _client, _client_key
     key = (api_key, base_url, timeout)
     if _client is None or _client_key != key:
-        _client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+        _client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=0)
         _client_key = key
     return _client
 
@@ -36,7 +36,7 @@ def refine_text(
     api_key: str,
     model: str = "grok-4-1-fast-reasoning",
     base_url: str = "https://api.x.ai/v1",
-    timeout: int = 10,
+    timeout: int = 30,
 ) -> str:
     """呼叫 LLM API 修飾語音辨識文字。"""
     client = _get_client(api_key, base_url, timeout)

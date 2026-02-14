@@ -35,7 +35,7 @@ llm:
   provider: "xai"
   model: "grok-4-1-fast-reasoning"
   base_url: "https://api.x.ai/v1"
-  timeout: 10
+  timeout: 30
 
 logging:
   level: "INFO"

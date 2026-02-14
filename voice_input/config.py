@@ -48,7 +48,7 @@ class LLMConfig:
     model: str = "grok-4-1-fast-reasoning"
     base_url: str = "https://api.x.ai/v1"
     api_key: str = ""
-    timeout: int = 10
+    timeout: int = 30
 
 
 @dataclass
