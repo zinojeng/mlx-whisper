@@ -5,8 +5,17 @@ import os
 import threading
 from pathlib import Path
 
+import time
+
 import rumps
 from AppKit import NSEvent, NSFlagsChangedMask
+from Quartz import (
+    CGEventCreateKeyboardEvent,
+    CGEventSetFlags,
+    CGEventPost,
+    kCGHIDEventTap,
+    kCGEventFlagMaskCommand,
+)
 
 from .config import AppConfig
 from .app_controller import AppController
@@ -36,8 +45,24 @@ STYLE_LABELS = {
 _RIGHT_OPTION_KEYCODE = 61
 _OPTION_FLAG = 1 << 19  # NSAlternateKeyMask / NSEventModifierFlagOption
 
+# Auto-paste: Cmd+V keyCode
+_V_KEYCODE = 9
+
 # .env 路徑（repo root）
 _ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+
+
+def _simulate_paste() -> None:
+    """模擬 Cmd+V 貼上到當前使用中的視窗。"""
+    time.sleep(0.05)  # 等待剪貼簿就緒
+    # Key down
+    event_down = CGEventCreateKeyboardEvent(None, _V_KEYCODE, True)
+    CGEventSetFlags(event_down, kCGEventFlagMaskCommand)
+    CGEventPost(kCGHIDEventTap, event_down)
+    # Key up
+    event_up = CGEventCreateKeyboardEvent(None, _V_KEYCODE, False)
+    CGEventSetFlags(event_up, kCGEventFlagMaskCommand)
+    CGEventPost(kCGHIDEventTap, event_up)
 
 
 def _save_api_key_to_env(api_key: str) -> None:
@@ -82,6 +107,7 @@ class VoiceInputMenuBarApp(rumps.App):
         self._processing = False
         self._hotkey_monitor = None
         self._hotkey_held = False  # push-to-talk 狀態
+        self._auto_paste = True  # 自動貼上到當前視窗
 
         # --- 選單建構 ---
         self.record_button = rumps.MenuItem(
@@ -116,6 +142,10 @@ class VoiceInputMenuBarApp(rumps.App):
             callback=self._toggle_llm,
         )
 
+        # 自動貼上開關
+        self.paste_toggle = rumps.MenuItem(
+            "自動貼上 ON", callback=self._toggle_auto_paste)
+
         # API Key 設定
         api_key_button = rumps.MenuItem("Set API Key...", callback=self._set_api_key)
 
@@ -127,6 +157,7 @@ class VoiceInputMenuBarApp(rumps.App):
             self.context_menu,
             self.style_menu,
             self.llm_toggle,
+            self.paste_toggle,
             api_key_button,
             None,
             quit_button,
@@ -251,10 +282,12 @@ class VoiceInputMenuBarApp(rumps.App):
         thread.start()
 
     def _process_in_background(self):
-        """背景執行轉錄 + 後處理 + 剪貼簿。"""
+        """背景執行轉錄 + 後處理 + 剪貼簿 + 自動貼上。"""
         try:
             result = self.controller.stop_recording_and_process()
             if result:
+                if self._auto_paste:
+                    _simulate_paste()
                 preview = result[:80] + ("..." if len(result) > 80 else "")
                 rumps.notification("語音輸入完成", "已複製到剪貼簿", preview)
             else:
@@ -295,6 +328,13 @@ class VoiceInputMenuBarApp(rumps.App):
         self.config.llm.style = style
         self.controller.postprocessor.llm_config.style = style
         logger.info("Style 切換為: %s", style)
+
+    # --- 自動貼上開關 ---
+
+    def _toggle_auto_paste(self, sender):
+        self._auto_paste = not self._auto_paste
+        self.paste_toggle.title = f"自動貼上 {'ON' if self._auto_paste else 'OFF'}"
+        logger.info("自動貼上: %s", "ON" if self._auto_paste else "OFF")
 
     # --- LLM 開關 ---
 

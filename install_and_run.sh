@@ -58,7 +58,7 @@ source "$VENV_DIR/bin/activate"
 echo "正在安裝相依套件..."
 pip install --upgrade pip --quiet
 pip install -e "$SCRIPT_DIR" --quiet
-pip install sounddevice PyYAML python-dotenv openai rumps --quiet
+pip install sounddevice PyYAML python-dotenv openai rumps pyobjc-framework-Quartz --quiet
 echo "✅ 套件安裝完成"
 
 echo
