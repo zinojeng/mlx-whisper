@@ -1,8 +1,9 @@
+
 # lightning-whisper-mlx — 專案筆記
 
 ## 專案概覽
 
-基於 [lightning-whisper-mlx](https://github.com/mustafaaljadery/lightning-whisper-mlx) 的 macOS 語音輸入系統。使用 MLX 框架在 Apple Silicon 上進行高效語音辨識，並透過 CLI 操作完成中文語音轉文字。
+基於 [lightning-whisper-mlx](https://github.com/mustafaaljadery/lightning-whisper-mlx) 的跨平台語音輸入系統。macOS 版使用 MLX 框架在 Apple Silicon 上進行高效語音辨識；iOS 版使用 Apple Speech Framework。兩者皆透過 xAI Grok API 進行 LLM 後處理。
 
 ## 專案結構
 
@@ -13,7 +14,7 @@ lightning-whisper-mlx/
 │   ├── transcribe.py          # 轉錄核心
 │   ├── load_models.py         # 模型載入
 │   └── ...
-├── voice_input/               # 語音輸入系統 v0.1（新增）
+├── voice_input/               # macOS 語音輸入系統
 │   ├── config.py              # 設定管理（YAML + dataclass + .env）
 │   ├── audio_capture.py       # 麥克風錄音（sounddevice）
 │   ├── asr_engine.py          # 封裝 LightningWhisperMLX
@@ -24,6 +25,17 @@ lightning-whisper-mlx/
 │   ├── delivery.py            # 剪貼簿 + macOS 通知
 │   ├── app_controller.py      # 狀態機控制器
 │   └── main.py                # CLI 進入點
+├── ios-app/                   # iOS App（SwiftUI）
+│   └── VoiceInput/
+│       ├── VoiceInput.xcodeproj/
+│       └── VoiceInput/
+│           ├── VoiceInputApp.swift      # App 進入點
+│           ├── ContentView.swift        # 主畫面 + push-to-talk 按鈕
+│           ├── VoiceInputViewModel.swift # 錄音/辨識/LLM ViewModel
+│           ├── GrokService.swift        # xAI Grok API 客戶端
+│           ├── SettingsView.swift       # 設定頁面
+│           ├── Assets.xcassets/         # App Icon + AccentColor
+│           └── Info.plist               # 權限宣告（麥克風/語音辨識）
 ├── config_default.yaml        # 預設設定檔
 ├── .env                       # API Key（不入版控）
 ├── install_and_run.sh         # 一鍵安裝啟動腳本
@@ -34,12 +46,14 @@ lightning-whisper-mlx/
 
 ## 關鍵限制 & 注意事項
 
-1. **必須在 repo root 執行**：`LightningWhisperMLX` 使用 `./mlx_models/` 相對路徑存放模型（`lightning.py:79-91`），`asr_engine.py` 會自動 `os.chdir()` 到 repo root
-2. **Apple Silicon 限定**：MLX 框架僅支援 arm64
-3. **需要 ffmpeg**：ASR 音訊載入依賴 ffmpeg
-4. **預設模型**：`small` + `language="zh"`，可透過 `--model` / `--language` 覆蓋
+1. **macOS 必須在 repo root 執行**：`LightningWhisperMLX` 使用 `./mlx_models/` 相對路徑存放模型（`lightning.py:79-91`），`asr_engine.py` 會自動 `os.chdir()` 到 repo root
+2. **macOS：Apple Silicon 限定**：MLX 框架僅支援 arm64
+3. **macOS：需要 ffmpeg**：ASR 音訊載入依賴 ffmpeg
+4. **預設模型**：macOS `small` + `language="zh"`；iOS 使用 Apple Speech（`zh-TW`）
+5. **iOS deployment target**：iOS 17.0+（支援 iPhone 14 Pro 及以上）
+6. **iOS 簽名**：使用 Personal Team（`F287UM4MK5`），bundle ID `com.voiceinput.app`
 
-## 額外相依套件（voice_input 需要）
+## 額外相依套件（macOS voice_input 需要）
 
 - `sounddevice` — 麥克風錄音
 - `PyYAML` — 設定檔解析
@@ -79,15 +93,31 @@ python -m voice_input.main --style concise
 
 # 組合使用
 python -m voice_input.main --context "醫學研究" --style bullet --debug
+
+# iOS build（需要 Xcode）
+xcodebuild -project ios-app/VoiceInput/VoiceInput.xcodeproj -scheme VoiceInput \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' build
+
+# iOS 安裝到實機（替換 DEVICE_ID）
+xcrun devicectl device install app --device DEVICE_ID \
+  ~/Library/Developer/Xcode/DerivedData/VoiceInput-*/Build/Products/Debug-iphoneos/VoiceInput.app
 ```
 
 ## 資料流
 
+### macOS
 ```
 麥克風 → WAV temp file → LightningWhisperMLX.transcribe() → raw_text
 → [LLM 路徑] Grok API 一次完成修正錯字+標點+去口頭禪+潤飾 → final_text
 → [規則 fallback] 移除口頭禪 → 去重複 → 加標點 → 換行 → final_text
-→ pbcopy + 通知
+→ pbcopy + 通知 + 自動貼上（Cmd+V）
+```
+
+### iOS
+```
+麥克風 → Apple Speech (SFSpeechRecognizer) → raw_text
+→ [LLM 路徑] Grok API 修飾 → final_text
+→ UIPasteboard
 ```
 
 ## 狀態機流程
@@ -108,6 +138,7 @@ hardcoded defaults → `config_default.yaml` → 使用者自訂 YAML（`--confi
 - **行為**：啟用且有 API Key 時優先走 LLM；LLM 失敗或未設定時自動 fallback 到規則管線
 - **停用**：`--no-llm` CLI 參數 或 `config_default.yaml` 中 `llm.enabled: false`
 - **Timeout**：預設 30 秒，不重試（`max_retries=0`），失敗直接 fallback
+- **Thread safety**：`_get_client()` 使用 `threading.Lock` 保護全域 client 快取
 
 ### 上下文感知（`--context`）
 
@@ -120,21 +151,16 @@ hardcoded defaults → `config_default.yaml` → 使用者自訂 YAML（`--confi
 | `"財務報告"` | 「應收帳款」「毛利率」等術語正確辨識 |
 | （空）| 無領域偏好，通用處理 |
 
-也可在 `config_default.yaml` 中設定 `llm.context`，CLI `--context` 會覆蓋。
-
 ### 輸出風格（`--style`）
 
-| `--style` | 說明 | 輸出範例 |
-|-----------|------|---------|
-| `professional`（預設）| 專業書面語，語氣正式 | 程式的效能表現不錯，但可再優化。API 回應時間約 350 毫秒。 |
-| `concise` | 極度精簡，只留核心 | 程式效能尚可，API 回應 350ms，需優化。 |
-| `bullet` | 條列式要點 | - 程式效能不錯，可再優化<br>- API 回應時間約 350 毫秒 |
-| `casual` | 口語親切風格 | 程式跑起來還不錯啦，API 大概 350 毫秒。 |
+| `--style` | 說明 |
+|-----------|------|
+| `professional`（預設）| 專業書面語，語氣正式 |
+| `concise` | 極度精簡，只留核心 |
+| `bullet` | 條列式要點 |
+| `casual` | 口語親切風格 |
 
-### Prompt 架構（`llm_refine.py`）
+## Git Remote
 
-動態組裝 system prompt：`_BASE_PROMPT` + 領域上下文（選填）+ 風格指示 + `_OUTPUT_INSTRUCTIONS`
-
-處理能力：語意推論、專業術語加註英文、中英夾雜保留、台灣在地用語、口語數字轉阿拉伯數字、去口頭禪、結構化分段
-
-安全措施：`context` 截斷 50 字並移除 `\n` / `#` 防止 prompt injection
+- `origin` → `mustafaaljadery/lightning-whisper-mlx`（上游，唯讀）
+- `my-repo` → `zinojeng/mlx-whisper`（fork，push 用這個）
