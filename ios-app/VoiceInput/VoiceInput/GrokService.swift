@@ -38,8 +38,23 @@ enum GrokService {
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else { return nil }
+            guard let httpResponse = response as? HTTPURLResponse else { return nil }
+
+            guard httpResponse.statusCode == 200 else {
+                let statusCode = httpResponse.statusCode
+                let body = String(data: data, encoding: .utf8) ?? "(unreadable)"
+                switch statusCode {
+                case 401:
+                    print("[GrokService] 401 Unauthorized — API key 無效或過期")
+                case 429:
+                    print("[GrokService] 429 Rate Limited — 請求頻率過高")
+                case 500...599:
+                    print("[GrokService] \(statusCode) Server Error — \(body)")
+                default:
+                    print("[GrokService] HTTP \(statusCode) — \(body)")
+                }
+                return nil
+            }
 
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let choices = json["choices"] as? [[String: Any]],
@@ -48,7 +63,7 @@ enum GrokService {
                 return content.trimmingCharacters(in: .whitespacesAndNewlines)
             }
         } catch {
-            print("Grok API error: \(error)")
+            print("[GrokService] Network error: \(error.localizedDescription)")
         }
         return nil
     }

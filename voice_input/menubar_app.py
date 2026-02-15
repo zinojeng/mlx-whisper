@@ -107,6 +107,7 @@ class VoiceInputMenuBarApp(rumps.App):
         self._processing = False
         self._hotkey_monitor = None
         self._hotkey_held = False  # push-to-talk 狀態
+        self._hotkey_lock = threading.Lock()  # 保護 _hotkey_held / _recording / _processing
         self._auto_paste = True  # 自動貼上到當前視窗
 
         # --- 選單建構 ---
@@ -224,13 +225,21 @@ class VoiceInputMenuBarApp(rumps.App):
         def handler(event):
             if event.keyCode() != _RIGHT_OPTION_KEYCODE:
                 return
-            # 按下右 Option → 開始錄音
-            if event.modifierFlags() & _OPTION_FLAG and not self._hotkey_held:
-                self._hotkey_held = True
+            flags = event.modifierFlags()
+            with self._hotkey_lock:
+                # 按下右 Option → 開始錄音
+                if flags & _OPTION_FLAG and not self._hotkey_held:
+                    self._hotkey_held = True
+                    action = "start"
+                # 放開右 Option → 停止錄音
+                elif not (flags & _OPTION_FLAG) and self._hotkey_held:
+                    self._hotkey_held = False
+                    action = "stop"
+                else:
+                    action = None
+            if action == "start":
                 rumps.Timer(lambda t: (t.stop(), self._hotkey_start()), 0).start()
-            # 放開右 Option → 停止錄音
-            elif not (event.modifierFlags() & _OPTION_FLAG) and self._hotkey_held:
-                self._hotkey_held = False
+            elif action == "stop":
                 rumps.Timer(lambda t: (t.stop(), self._hotkey_stop()), 0).start()
 
         self._hotkey_monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
@@ -240,22 +249,28 @@ class VoiceInputMenuBarApp(rumps.App):
 
     def _hotkey_start(self):
         """熱鍵按下：開始錄音。"""
-        if not self._recording and not self._processing:
+        with self._hotkey_lock:
+            should_start = not self._recording and not self._processing
+        if should_start:
             self._start_recording()
 
     def _hotkey_stop(self):
         """熱鍵放開：停止錄音並轉錄。"""
-        if self._recording:
+        with self._hotkey_lock:
+            should_stop = self._recording
+        if should_stop:
             self._stop_recording()
 
     # --- 錄音控制 ---
 
     def _toggle_recording(self, sender):
         """切換錄音狀態。"""
-        if self._processing:
-            return
+        with self._hotkey_lock:
+            if self._processing:
+                return
+            is_rec = self._recording
 
-        if not self._recording:
+        if not is_rec:
             self._start_recording()
         else:
             self._stop_recording()
@@ -264,7 +279,8 @@ class VoiceInputMenuBarApp(rumps.App):
         """開始錄音。"""
         try:
             self.controller.start_recording()
-            self._recording = True
+            with self._hotkey_lock:
+                self._recording = True
             self.title = ICON_RECORDING
             self.record_button.title = "Stop Recording  (hold R⌥)"
         except Exception as e:
@@ -273,8 +289,9 @@ class VoiceInputMenuBarApp(rumps.App):
 
     def _stop_recording(self):
         """停止錄音並在背景執行轉錄。"""
-        self._recording = False
-        self._processing = True
+        with self._hotkey_lock:
+            self._recording = False
+            self._processing = True
         self.title = ICON_PROCESSING
         self.record_button.title = "Processing..."
 
@@ -299,7 +316,8 @@ class VoiceInputMenuBarApp(rumps.App):
 
     def _on_process_done(self, result, error):
         """主執行緒回呼：更新 UI 狀態。"""
-        self._processing = False
+        with self._hotkey_lock:
+            self._processing = False
         self.title = ICON_IDLE
         self.record_button.title = "Start Recording  (hold R⌥)"
         if error:

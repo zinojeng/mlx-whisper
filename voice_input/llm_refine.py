@@ -1,6 +1,7 @@
 """LLM 文字修飾模組 — 使用 xAI Grok API 修正語音辨識文字。"""
 
 import logging
+import threading
 from typing import Optional
 
 from openai import OpenAI
@@ -65,16 +66,18 @@ def build_system_prompt(context: str = "", style: str = "professional") -> str:
 # 模組層級快取，避免每次呼叫都建立新連線
 _client: Optional[OpenAI] = None
 _client_key: Optional[tuple] = None
+_client_lock = threading.Lock()
 
 
 def _get_client(api_key: str, base_url: str, timeout: int) -> OpenAI:
     """取得或重用 OpenAI client。參數變更時重新建立。"""
     global _client, _client_key
-    key = (api_key, base_url, timeout)
-    if _client is None or _client_key != key:
-        _client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=0)
-        _client_key = key
-    return _client
+    with _client_lock:
+        key = (api_key, base_url, timeout)
+        if _client is None or _client_key != key:
+            _client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=0)
+            _client_key = key
+        return _client
 
 
 def refine_text(

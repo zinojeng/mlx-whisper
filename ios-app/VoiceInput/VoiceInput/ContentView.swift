@@ -94,10 +94,16 @@ struct RecordButton: View {
             }
             .shadow(color: isRecording ? .red.opacity(0.4) : .clear, radius: 20)
             .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        if !isRecording && !isProcessing {
-                            onPress()
+                LongPressGesture(minimumDuration: 0.2)
+                    .sequenced(before: DragGesture(minimumDistance: 0))
+                    .onChanged { value in
+                        switch value {
+                        case .second(true, _):
+                            if !isRecording && !isProcessing {
+                                onPress()
+                            }
+                        default:
+                            break
                         }
                     }
                     .onEnded { _ in

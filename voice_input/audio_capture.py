@@ -47,6 +47,11 @@ class AudioCapture:
             )
             self._stream.start()
         except Exception as e:
+            if self._stream is not None:
+                try:
+                    self._stream.close()
+                except Exception:
+                    pass
             self._stream = None
             logger.error("無法開啟麥克風: %s", e)
             raise

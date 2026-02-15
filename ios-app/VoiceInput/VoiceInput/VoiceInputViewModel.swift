@@ -62,7 +62,11 @@ final class VoiceInputViewModel: ObservableObject {
             return false
         }
 
-        let micStatus = await AVAudioApplication.requestRecordPermission()
+        let micStatus = await withCheckedContinuation { continuation in
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                continuation.resume(returning: granted)
+            }
+        }
         guard micStatus else {
             showErrorAlert("請在「設定」中允許麥克風權限")
             return false
@@ -107,11 +111,16 @@ final class VoiceInputViewModel: ObservableObject {
 
                 recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
                     Task { @MainActor in
+                        if let error {
+                            print("[SpeechRecognition] Error: \(error.localizedDescription)")
+                            self?.stopAudioEngine()
+                            return
+                        }
                         if let result {
                             self?.resultText = result.bestTranscription.formattedString
-                        }
-                        if error != nil {
-                            self?.stopAudioEngine()
+                            if result.isFinal {
+                                self?.stopAudioEngine()
+                            }
                         }
                     }
                 }

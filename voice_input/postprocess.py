@@ -21,6 +21,18 @@ class TextPostprocessor:
         self.max_line_length = max_line_length
         self.llm_config = llm_config
 
+        # 預編譯口頭禪 regex（按長度降序以避免部分匹配問題）
+        sorted_fillers = sorted(self.filler_words, key=len, reverse=True)
+        self._filler_patterns = [
+            re.compile(
+                r'(?:^|(?<=[\s，。！？、；：\u3000]))' +
+                re.escape(filler) +
+                r'(?:[\s，。！？、；：\u3000]|$)'
+            )
+            for filler in sorted_fillers
+        ]
+        self._whitespace_pattern = re.compile(r'\s+')
+
     def _llm_available(self) -> bool:
         """檢查 LLM 是否可用。"""
         return (self.llm_config is not None
@@ -59,18 +71,10 @@ class TextPostprocessor:
             return original.strip()
 
     def _remove_fillers(self, text: str) -> str:
-        """移除口頭禪。按長度降序排列以避免部分匹配問題。"""
-        sorted_fillers = sorted(self.filler_words, key=len, reverse=True)
-        for filler in sorted_fillers:
-            # 移除獨立出現的口頭禪（前後為標點、空白或字串邊界）
-            pattern = re.compile(
-                r'(?:^|(?<=[\s，。！？、；：\u3000]))' +
-                re.escape(filler) +
-                r'(?:[\s，。！？、；：\u3000]|$)'
-            )
+        """移除口頭禪（使用預編譯的 regex）。"""
+        for pattern in self._filler_patterns:
             text = pattern.sub('', text)
-        # 清理多餘空白
-        text = re.sub(r'\s+', '', text)
+        text = self._whitespace_pattern.sub('', text)
         return text
 
     def _remove_repeated_chars(self, text: str) -> str:
