@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 
 import rumps
-from AppKit import NSEvent, NSKeyDownMask
+from AppKit import NSEvent, NSKeyDownMask, NSKeyUpMask, NSFlagsChangedMask
 
 from .config import AppConfig
 from .app_controller import AppController
@@ -81,10 +81,11 @@ class VoiceInputMenuBarApp(rumps.App):
         self._recording = False
         self._processing = False
         self._hotkey_monitor = None
+        self._hotkey_held = False  # push-to-talk 狀態
 
         # --- 選單建構 ---
         self.record_button = rumps.MenuItem(
-            "Start Recording  (⌥Space)", callback=self._toggle_recording)
+            "Start Recording  (hold ⌥Space)", callback=self._toggle_recording)
 
         # Context 子選單
         self.context_menu = rumps.MenuItem("Context")
@@ -185,23 +186,47 @@ class VoiceInputMenuBarApp(rumps.App):
         on = self.config.llm.enabled and bool(self.config.llm.api_key)
         self.llm_toggle.title = f"LLM 後處理 {'ON' if on else 'OFF'}"
 
-    # --- 全域熱鍵 (⌥ + Space) ---
+    # --- 全域熱鍵 (⌥ + Space) Push-to-Talk ---
 
     def _register_hotkey(self):
-        """註冊 Option + Space 全域熱鍵。"""
+        """註冊 Option + Space push-to-talk 熱鍵：按住錄音，放開轉錄。"""
         def handler(event):
-            if (event.keyCode() == _SPACE_KEYCODE
-                    and event.modifierFlags() & _OPTION_FLAG):
-                self._hotkey_triggered()
+            etype = event.type()
+            # Key down: Option + Space → 開始錄音
+            if (etype == 10  # NSKeyDown
+                    and event.keyCode() == _SPACE_KEYCODE
+                    and event.modifierFlags() & _OPTION_FLAG
+                    and not self._hotkey_held):
+                self._hotkey_held = True
+                rumps.Timer(lambda t: (t.stop(), self._hotkey_start()), 0).start()
+            # Key up: Space 放開 → 停止錄音
+            elif (etype == 11  # NSKeyUp
+                    and event.keyCode() == _SPACE_KEYCODE
+                    and self._hotkey_held):
+                self._hotkey_held = False
+                rumps.Timer(lambda t: (t.stop(), self._hotkey_stop()), 0).start()
+            # Flags changed: Option 放開 → 停止錄音
+            elif (etype == 12  # NSFlagsChanged
+                    and self._hotkey_held
+                    and not (event.modifierFlags() & _OPTION_FLAG)):
+                self._hotkey_held = False
+                rumps.Timer(lambda t: (t.stop(), self._hotkey_stop()), 0).start()
 
+        mask = NSKeyDownMask | NSKeyUpMask | NSFlagsChangedMask
         self._hotkey_monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
-            NSKeyDownMask, handler
+            mask, handler
         )
-        logger.info("全域熱鍵已註冊: ⌥ + Space")
+        logger.info("全域熱鍵已註冊: ⌥ + Space (push-to-talk)")
 
-    def _hotkey_triggered(self):
-        """熱鍵觸發：在主執行緒切換錄音。"""
-        rumps.Timer(lambda t: (t.stop(), self._toggle_recording(None)), 0).start()
+    def _hotkey_start(self):
+        """熱鍵按下：開始錄音。"""
+        if not self._recording and not self._processing:
+            self._start_recording()
+
+    def _hotkey_stop(self):
+        """熱鍵放開：停止錄音並轉錄。"""
+        if self._recording:
+            self._stop_recording()
 
     # --- 錄音控制 ---
 
@@ -221,7 +246,7 @@ class VoiceInputMenuBarApp(rumps.App):
             self.controller.start_recording()
             self._recording = True
             self.title = ICON_RECORDING
-            self.record_button.title = "Stop Recording  (⌥Space)"
+            self.record_button.title = "Stop Recording  (hold ⌥Space)"
         except Exception as e:
             logger.error("開始錄音失敗: %s", e)
             rumps.notification("語音輸入", "錄音失敗", str(e))
@@ -252,7 +277,7 @@ class VoiceInputMenuBarApp(rumps.App):
             self.controller.reset()
             self._processing = False
             self.title = ICON_IDLE
-            self.record_button.title = "Start Recording  (⌥Space)"
+            self.record_button.title = "Start Recording  (hold ⌥Space)"
 
     # --- Context 切換 ---
 
