@@ -37,15 +37,22 @@ class AudioCapture:
                 logger.warning("已在錄音中，忽略重複呼叫")
                 return
             self._frames = []
-            self._recording = True
 
-        self._stream = sd.InputStream(
-            samplerate=self.sample_rate,
-            channels=self.channels,
-            dtype="int16",
-            callback=self._audio_callback,
-        )
-        self._stream.start()
+        try:
+            self._stream = sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=self.channels,
+                dtype="int16",
+                callback=self._audio_callback,
+            )
+            self._stream.start()
+        except Exception as e:
+            self._stream = None
+            logger.error("無法開啟麥克風: %s", e)
+            raise
+
+        with self._lock:
+            self._recording = True
         logger.info("錄音開始 (sample_rate=%d, channels=%d)", self.sample_rate, self.channels)
 
     def stop(self) -> str:

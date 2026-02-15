@@ -282,24 +282,33 @@ class VoiceInputMenuBarApp(rumps.App):
         thread.start()
 
     def _process_in_background(self):
-        """背景執行轉錄 + 後處理 + 剪貼簿 + 自動貼上。"""
+        """背景執行轉錄 + 後處理 + 剪貼簿 + 自動貼上（UI 更新交回主執行緒）。"""
+        result = None
+        error = None
         try:
             result = self.controller.stop_recording_and_process()
-            if result:
-                if self._auto_paste:
-                    _simulate_paste()
-                preview = result[:80] + ("..." if len(result) > 80 else "")
-                rumps.notification("語音輸入完成", "已複製到剪貼簿", preview)
-            else:
-                rumps.notification("語音輸入", "未偵測到語音", "")
+            if result and self._auto_paste:
+                _simulate_paste()
         except Exception as e:
             logger.error("處理失敗: %s", e)
-            rumps.notification("語音輸入", "處理失敗", str(e))
+            error = e
         finally:
             self.controller.reset()
-            self._processing = False
-            self.title = ICON_IDLE
-            self.record_button.title = "Start Recording  (hold R⌥)"
+            # 所有 UI 更新交回主執行緒
+            rumps.Timer(lambda t: (t.stop(), self._on_process_done(result, error)), 0).start()
+
+    def _on_process_done(self, result, error):
+        """主執行緒回呼：更新 UI 狀態。"""
+        self._processing = False
+        self.title = ICON_IDLE
+        self.record_button.title = "Start Recording  (hold R⌥)"
+        if error:
+            rumps.notification("語音輸入", "處理失敗", str(error))
+        elif result:
+            preview = result[:80] + ("..." if len(result) > 80 else "")
+            rumps.notification("語音輸入完成", "已複製到剪貼簿", preview)
+        else:
+            rumps.notification("語音輸入", "未偵測到語音", "")
 
     # --- Context 切換 ---
 

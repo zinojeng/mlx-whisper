@@ -22,11 +22,15 @@ def copy_to_clipboard(text: str) -> bool:
         return False
 
 
+def _escape_applescript(s: str) -> str:
+    """跳脫 AppleScript 雙引號字串中的特殊字元。"""
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def show_notification(title: str, message: str) -> bool:
     """使用 osascript 顯示 macOS 通知。"""
-    # 跳脫單引號
-    safe_title = title.replace("'", "'\\''")
-    safe_message = message.replace("'", "'\\''")
+    safe_title = _escape_applescript(title)
+    safe_message = _escape_applescript(message)
     script = (
         f'display notification "{safe_message}" '
         f'with title "{safe_title}"'
